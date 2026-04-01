@@ -1,19 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-
-// ---- STORAGE LAYER ----
-// Abstracts localStorage so we can swap backends later if needed
-const storage = {
-  get(key) {
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch { return null; }
-  },
-  set(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
-  },
-  remove(key) {
-    try { localStorage.removeItem(key); return true; } catch { return false; }
-  },
-};
+import { db } from "./firebase";
+import { useAuth } from "./AuthContext";
+import LoginScreen from "./LoginScreen";
+import { doc, getDoc, setDoc, collection, getDocs } from "firebase/firestore";
 
 // ---- CONSTANTS ----
 const MOODS = ["😭", "😞", "😐", "😊", "🤩"];
@@ -174,7 +164,6 @@ const generateDemoData = (categories) => {
     const weatherMalus = weathers[d-1] === "rain" || weathers[d-1] === "storm" ? -0.5 : weathers[d-1] === "sun" ? 0.3 : 0;
     const mood = Math.max(0, Math.min(4, Math.round(baseMood + gymBonus + weatherMalus + (r() - 0.5))));
     const gymTypes = hours.gym > 0 ? [...new Set([gymOpts[Math.floor(r() * 6)], ...(r() > 0.6 ? [gymOpts[Math.floor(r() * 6)]] : [])])] : [];
-
     entries[dateStr] = { date: dateStr, hours, gymTypes, notes, mood, cyclePhase: phases[d-1], weatherType: weathers[d-1], weatherTemp: temps[d-1],
       morningJournal: "Demo — " + getPrompt(dateStr, MORNING_PROMPTS).substring(0, 50) + "...",
       nightReflection: "Demo — " + getPrompt(dateStr, NIGHT_PROMPTS).substring(0, 40) + "...",
@@ -238,7 +227,6 @@ function Section({ title, children, style = {} }) {
 function LogForm({ entry, setEntry, onSave, existing, categories }) {
   const totalHours = Object.values(entry.hours).reduce((a, b) => a + b, 0);
   const notes = entry.notes || {};
-
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -248,9 +236,7 @@ function LogForm({ entry, setEntry, onSave, existing, categories }) {
       <div style={{ textAlign: "center", marginBottom: 20 }}>
         <input type="date" value={entry.date} onChange={(e) => setEntry(makeEmptyEntry(e.target.value, categories))} style={{ fontFamily: "'Work Sans', sans-serif", fontSize: 14, padding: "6px 12px", borderRadius: 8, border: "1px solid #E8E2D8", color: "#2D2A26" }} />
       </div>
-
       <Section title="¿Cómo estuvo el día?"><MoodSelector value={entry.mood} onChange={(v) => setEntry({ ...entry, mood: v })} /></Section>
-
       <Section title="Clima">
         <div style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 12, color: "#8A8478", margin: "0 0 6px 0" }}>Cielo</p>
@@ -261,7 +247,6 @@ function LogForm({ entry, setEntry, onSave, existing, categories }) {
           <ChipSelector options={WEATHER_TEMPS} value={entry.weatherTemp} onChange={(v) => setEntry({ ...entry, weatherTemp: v })} />
         </div>
       </Section>
-
       <Section title={`Horas · ${totalHours}h total`}>
         {categories.map((cat) => (
           <div key={cat.id}>
@@ -274,30 +259,26 @@ function LogForm({ entry, setEntry, onSave, existing, categories }) {
             )}
             {cat.id === "gym" && (entry.hours.gym || 0) > 0 && (
               <div style={{ marginTop: 8, marginBottom: 4, marginLeft: 38 }}>
-                <p style={{ fontSize: 12, color: "#8A8478", margin: "0 0 6px 0" }}>Tipo de entreno (puede ser más de uno)</p>
+                <p style={{ fontSize: 12, color: "#8A8478", margin: "0 0 6px 0" }}>Tipo de entreno</p>
                 <ChipSelector options={GYM_TYPES} value={entry.gymTypes || []} multi onChange={(v) => setEntry({ ...entry, gymTypes: v })} />
               </div>
             )}
           </div>
         ))}
       </Section>
-
       <Section title="Fase del ciclo"><ChipSelector options={CYCLE_PHASES} value={entry.cyclePhase} onChange={(v) => setEntry({ ...entry, cyclePhase: v })} /></Section>
-
       <Section title="Morning Pages ☀️">
         <p style={{ fontSize: 13, color: "#C67B5C", fontStyle: "italic", fontFamily: "'Fraunces', serif", margin: "0 0 10px 0", lineHeight: 1.5 }}>{getPrompt(entry.date, MORNING_PROMPTS)}</p>
         <textarea value={entry.morningJournal} onChange={(e) => setEntry({ ...entry, morningJournal: e.target.value })} placeholder="Escribí lo que necesites soltar esta mañana..." rows={5}
           style={{ width: "100%", border: "1px solid #E8E2D8", borderRadius: 10, padding: 14, fontSize: 14, fontFamily: "'Work Sans', sans-serif", resize: "vertical", color: "#2D2A26", background: "#FDFCFA", boxSizing: "border-box" }} />
         <div style={{ textAlign: "right", fontSize: 11, color: "#B0A99E", marginTop: 4 }}>{entry.morningJournal.length} caracteres</div>
       </Section>
-
       <Section title="Reflexión nocturna 🌙">
         <p style={{ fontSize: 13, color: "#8B6FB5", fontStyle: "italic", fontFamily: "'Fraunces', serif", margin: "0 0 10px 0", lineHeight: 1.5 }}>{getPrompt(entry.date, NIGHT_PROMPTS)}</p>
         <textarea value={entry.nightReflection} onChange={(e) => setEntry({ ...entry, nightReflection: e.target.value })} placeholder="¿Qué pasó hoy? ¿Qué salió bien? ¿Qué ajustarías?" rows={4}
           style={{ width: "100%", border: "1px solid #E8E2D8", borderRadius: 10, padding: 14, fontSize: 14, fontFamily: "'Work Sans', sans-serif", resize: "vertical", color: "#2D2A26", background: "#FDFCFA", boxSizing: "border-box" }} />
         <div style={{ textAlign: "right", fontSize: 11, color: "#B0A99E", marginTop: 4 }}>{entry.nightReflection.length} caracteres</div>
       </Section>
-
       <button onClick={onSave} style={{ width: "100%", padding: "14px 0", background: "#C67B5C", color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: "pointer", marginBottom: 40 }}
         onMouseOver={(e) => (e.target.style.background = "#B06A4D")} onMouseOut={(e) => (e.target.style.background = "#C67B5C")}>
         {existing ? "Actualizar registro" : "Guardar registro"} ✓
@@ -448,19 +429,16 @@ function MoodStory({ data, onSelectDate, categories }) {
           ))}
         </svg>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
-          {/* Cycle */}
           <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden" }}>
             {data.map((e, i) => { const p = e.cyclePhase ? CYCLE_PHASES.find((c) => c.id === e.cyclePhase) : null;
               return <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: p ? `${p.color}60` : "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8 }}>{p?.emoji}</div>;
             })}
           </div>
-          {/* Weather */}
           <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden" }}>
             {data.map((e, i) => { const w = e.weatherType ? WEATHER_TYPES.find((x) => x.id === e.weatherType) : null;
               return <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8 }}>{w?.emoji}</div>;
             })}
           </div>
-          {/* Gym */}
           <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden" }}>
             {data.map((e, i) => (
               <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -468,7 +446,6 @@ function MoodStory({ data, onSelectDate, categories }) {
               </div>
             ))}
           </div>
-          {/* Hours */}
           <div style={{ display: "flex", height: 18, borderRadius: 4, overflow: "hidden", gap: 1 }}>
             {data.map((e, i) => { const total = Object.values(e.hours).reduce((a, b) => a + b, 0);
               return <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 1px" }}>
@@ -476,20 +453,10 @@ function MoodStory({ data, onSelectDate, categories }) {
               </div>;
             })}
           </div>
-          {/* Dates */}
           <div style={{ display: "flex", height: 16 }}>
             {data.map((e, i) => <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, textAlign: "center", fontSize: 8, color: "#B0A99E", cursor: "pointer", lineHeight: "16px" }}>{new Date(e.date + "T12:00:00").getDate()}</div>)}
           </div>
         </div>
-      </div>
-      <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
-        {[{ label: "Ciclo", items: CYCLE_PHASES.map((p) => p.emoji) }, { label: "Gym", color: "#B5725B" }, { label: "Horas", color: "#5B7FB5" }].map((g, i) => (
-          <span key={i} style={{ fontSize: 10, color: "#8A8478", display: "flex", alignItems: "center", gap: 3 }}>
-            {g.color && <span style={{ width: 8, height: 8, borderRadius: 4, background: g.color, display: "inline-block" }} />}
-            {g.items && <span>{g.items.join(" ")}</span>}
-            {g.label}
-          </span>
-        ))}
       </div>
     </div>
   );
@@ -540,9 +507,7 @@ function DashboardView({ entries, onSelectDate, categories }) {
           </div>
         ))}
       </div>
-
       {data.length > 1 && <Section title="Mood Story"><p style={{ fontSize: 11, color: "#B0A99E", margin: "0 0 10px 0" }}>Línea = mood · debajo: ciclo, clima, gym, horas · click → ficha</p><MoodStory data={data} onSelectDate={onSelectDate} categories={categories} /></Section>}
-
       <h3 style={{ fontSize: 15, fontWeight: 600, color: "#6B6560", textTransform: "uppercase", letterSpacing: 1, margin: "24px 0 12px 0" }}>¿Qué impacta tu mood?</h3>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Section title="Gym" style={{ marginBottom: 12 }}>
@@ -559,7 +524,6 @@ function DashboardView({ entries, onSelectDate, categories }) {
           {WEATHER_TEMPS.map((t) => ({ label: `${t.emoji} ${t.label}`, ...avgBy((e) => e.weatherTemp === t.id), color: "#E88D67" })).filter((x) => x.count > 0).map((t, i) => <ComparisonBar key={i} {...t} />)}
         </Section>
       </div>
-
       {data.length > 0 && (
         <Section title="Horas por categoría">
           <ResponsiveContainer width="100%" height={180}>
@@ -599,28 +563,10 @@ function SettingsView({ categories, setCategories }) {
     setNewCat({ label: "", emoji: "📌", color: "#5B7FB5", hasNotes: true, notePlaceholder: "" });
   };
 
-  const handleRemove = (id) => {
-    if (categories.length <= 1) return;
-    setCategories(categories.filter((c) => c.id !== id));
-  };
-
-  const handleUpdate = (id, field, value) => {
-    setCategories(categories.map((c) => c.id === id ? { ...c, [field]: value } : c));
-  };
-
-  const moveUp = (i) => {
-    if (i === 0) return;
-    const arr = [...categories];
-    [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
-    setCategories(arr);
-  };
-
-  const moveDown = (i) => {
-    if (i >= categories.length - 1) return;
-    const arr = [...categories];
-    [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
-    setCategories(arr);
-  };
+  const handleRemove = (id) => { if (categories.length <= 1) return; setCategories(categories.filter((c) => c.id !== id)); };
+  const handleUpdate = (id, field, value) => setCategories(categories.map((c) => c.id === id ? { ...c, [field]: value } : c));
+  const moveUp = (i) => { if (i === 0) return; const arr = [...categories]; [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]]; setCategories(arr); };
+  const moveDown = (i) => { if (i >= categories.length - 1) return; const arr = [...categories]; [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]]; setCategories(arr); };
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -628,8 +574,6 @@ function SettingsView({ categories, setCategories }) {
         <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 500, color: "#2D2A26", margin: "0 0 4px 0" }}>Configuración</h2>
         <p style={{ color: "#8A8478", fontSize: 14, margin: 0 }}>Personalizá las categorías de horas</p>
       </div>
-
-      {/* Existing categories */}
       {categories.map((cat, i) => (
         <div key={cat.id} style={{ background: "#fff", borderRadius: 14, padding: "16px 20px", marginBottom: 10, boxShadow: "0 1px 4px rgba(45,42,38,0.06)", borderLeft: `4px solid ${cat.color}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: editing === cat.id ? 12 : 0 }}>
@@ -655,8 +599,7 @@ function SettingsView({ categories, setCategories }) {
               </div>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {PRESET_COLORS.map((c) => (
-                  <button key={c} onClick={() => handleUpdate(cat.id, "color", c)}
-                    style={{ width: 24, height: 24, borderRadius: 12, background: c, border: cat.color === c ? "2px solid #2D2A26" : "2px solid transparent", cursor: "pointer" }} />
+                  <button key={c} onClick={() => handleUpdate(cat.id, "color", c)} style={{ width: 24, height: 24, borderRadius: 12, background: c, border: cat.color === c ? "2px solid #2D2A26" : "2px solid transparent", cursor: "pointer" }} />
                 ))}
               </div>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#6B6560", cursor: "pointer" }}>
@@ -664,14 +607,12 @@ function SettingsView({ categories, setCategories }) {
                 Activar campo de notas cuando hay horas
               </label>
               {cat.hasNotes && (
-                <input value={cat.notePlaceholder || ""} onChange={(e) => handleUpdate(cat.id, "notePlaceholder", e.target.value)} style={settingsInput} placeholder="Placeholder para notas (Ej: Apliqué a 3 roles...)" />
+                <input value={cat.notePlaceholder || ""} onChange={(e) => handleUpdate(cat.id, "notePlaceholder", e.target.value)} style={settingsInput} placeholder="Placeholder para notas" />
               )}
             </div>
           )}
         </div>
       ))}
-
-      {/* Add new */}
       <Section title="Agregar categoría" style={{ marginTop: 24 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input value={newCat.emoji} onChange={(e) => setNewCat({ ...newCat, emoji: e.target.value })} style={{ ...settingsInput, width: 50, textAlign: "center" }} placeholder="📌" maxLength={4} />
@@ -679,8 +620,7 @@ function SettingsView({ categories, setCategories }) {
         </div>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
           {PRESET_COLORS.map((c) => (
-            <button key={c} onClick={() => setNewCat({ ...newCat, color: c })}
-              style={{ width: 24, height: 24, borderRadius: 12, background: c, border: newCat.color === c ? "2px solid #2D2A26" : "2px solid transparent", cursor: "pointer" }} />
+            <button key={c} onClick={() => setNewCat({ ...newCat, color: c })} style={{ width: 24, height: 24, borderRadius: 12, background: c, border: newCat.color === c ? "2px solid #2D2A26" : "2px solid transparent", cursor: "pointer" }} />
           ))}
         </div>
         <button onClick={handleAdd} disabled={!newCat.label.trim()}
@@ -688,12 +628,6 @@ function SettingsView({ categories, setCategories }) {
           + Agregar categoría
         </button>
       </Section>
-
-      <div style={{ marginTop: 24, padding: 20, background: "#fff", borderRadius: 14, boxShadow: "0 1px 4px rgba(45,42,38,0.06)" }}>
-        <p style={{ fontSize: 12, color: "#8A8478", margin: 0, lineHeight: 1.6 }}>
-          Los cambios se guardan automáticamente. Los registros existentes conservan sus datos — si eliminás una categoría, los datos históricos de esa categoría siguen en el CSV de exportación.
-        </p>
-      </div>
     </div>
   );
 }
@@ -705,6 +639,7 @@ const settingsInput = { border: "1px solid #E8E2D8", borderRadius: 8, padding: "
 const smallNavBtn = { background: "#fff", border: "1px solid #E8E2D8", borderRadius: 8, width: 32, height: 32, fontSize: 14, color: "#6B6560", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 };
 
 export default function App() {
+  const { user, loading: authLoading, logout } = useAuth();
   const [view, setView] = useState("log");
   const [entries, setEntries] = useState({});
   const [categories, setCategories] = useState(DEFAULT_HOUR_CATEGORIES);
@@ -715,20 +650,49 @@ export default function App() {
   const [history, setHistory] = useState([{ view: "log", date: null }]);
   const [historyIdx, setHistoryIdx] = useState(0);
 
-  // Load from localStorage
+  // Show login if not authenticated
+  if (authLoading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "#8A8478" }}>Cargando...</div>;
+  if (!user) return <LoginScreen />;
+
+  // ---- FIRESTORE LOAD ----
   useEffect(() => {
-    const savedEntries = storage.get("tracker-entries");
-    const savedCategories = storage.get("tracker-categories");
-    if (savedEntries) setEntries(savedEntries);
-    if (savedCategories) setCategories(savedCategories);
-    setLoading(false);
-  }, []);
+    if (!user) return;
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        // Load categories
+        const catDoc = await getDoc(doc(db, "users", user.uid, "profile", "categories"));
+        if (catDoc.exists()) setCategories(catDoc.data().list);
 
-  // Persist entries
-  const persistEntries = useCallback((ne) => { setEntries(ne); storage.set("tracker-entries", ne); }, []);
+        // Load entries
+        const entriesSnap = await getDocs(collection(db, "users", user.uid, "entries"));
+        const loaded = {};
+        entriesSnap.forEach((d) => { loaded[d.id] = d.data(); });
+        setEntries(loaded);
+      } catch (err) {
+        console.error("Error loading data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [user]);
 
-  // Persist categories
-  useEffect(() => { if (!loading) storage.set("tracker-categories", categories); }, [categories, loading]);
+  // ---- FIRESTORE SAVE ENTRY ----
+  const persistEntries = useCallback(async (ne) => {
+    setEntries(ne);
+    if (!user) return;
+    // Only save the entries that changed (we save all on bulk ops like demo)
+    for (const [date, entry] of Object.entries(ne)) {
+      await setDoc(doc(db, "users", user.uid, "entries", date), entry);
+    }
+  }, [user]);
+
+  // ---- FIRESTORE SAVE CATEGORIES ----
+  useEffect(() => {
+    if (!user || loading) return;
+    setDoc(doc(db, "users", user.uid, "profile", "categories"), { list: categories }).catch(console.error);
+  }, [categories, user, loading]);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
@@ -743,11 +707,38 @@ export default function App() {
   const goForward = () => { if (!canGoForward) return; const n = history[historyIdx + 1]; setHistoryIdx((i) => i + 1); setView(n.view); setSelectedDate(n.date); if (n.view === "log" && n.date) setFormEntry(entries[n.date] ? { ...entries[n.date] } : makeEmptyEntry(n.date, categories)); };
 
   const hasDemoData = Object.values(entries).some((e) => e.isDemo);
-  const handleLoadDemo = () => { persistEntries({ ...entries, ...generateDemoData(categories) }); showToast("🎭 Demo cargado"); navigate("calendar"); };
-  const handleClearDemo = () => { const c = {}; for (const [k, v] of Object.entries(entries)) { if (!v.isDemo) c[k] = v; } persistEntries(c); showToast("🗑️ Demo borrado"); };
-  const handleSave = () => { const e = { ...formEntry, savedAt: new Date().toISOString() }; delete e.isDemo; persistEntries({ ...entries, [e.date]: e }); showToast("✓ Guardado"); };
-  const handleSelectDate = (date) => { if (entries[date]) { navigate("ficha", date); } else { setFormEntry(makeEmptyEntry(date, categories)); navigate("log", date); } };
-  const handleEditFromFicha = () => { if (selectedDate && entries[selectedDate]) { setFormEntry({ ...entries[selectedDate] }); navigate("log", selectedDate); } };
+  const handleLoadDemo = () => { const demo = generateDemoData(categories); persistEntries({ ...entries, ...demo }); showToast("🎭 Demo cargado"); navigate("calendar"); };
+  const handleClearDemo = async () => {
+    const clean = {};
+    for (const [k, v] of Object.entries(entries)) { if (!v.isDemo) clean[k] = v; }
+    setEntries(clean);
+    // Delete demo docs from Firestore
+    for (const [k, v] of Object.entries(entries)) {
+      if (v.isDemo) {
+        const { deleteDoc } = await import("firebase/firestore");
+        await deleteDoc(doc(db, "users", user.uid, "entries", k));
+      }
+    }
+    showToast("🗑️ Demo borrado");
+  };
+
+  const handleSave = async () => {
+    const e = { ...formEntry, savedAt: new Date().toISOString() };
+    delete e.isDemo;
+    const newEntries = { ...entries, [e.date]: e };
+    setEntries(newEntries);
+    await setDoc(doc(db, "users", user.uid, "entries", e.date), e);
+    showToast("✓ Guardado");
+  };
+
+  const handleSelectDate = (date) => {
+    if (entries[date]) { navigate("ficha", date); }
+    else { setFormEntry(makeEmptyEntry(date, categories)); navigate("log", date); }
+  };
+
+  const handleEditFromFicha = () => {
+    if (selectedDate && entries[selectedDate]) { setFormEntry({ ...entries[selectedDate] }); navigate("log", selectedDate); }
+  };
 
   const handleExport = () => {
     const dates = Object.keys(entries).sort(); if (!dates.length) return;
@@ -784,6 +775,7 @@ export default function App() {
             {!hasDemoData && <button onClick={handleLoadDemo} style={{ background: "none", border: "1px solid #D4A0C0", borderRadius: 8, padding: "5px 12px", fontSize: 12, color: "#D4A0C0", cursor: "pointer" }}>🎭 Demo</button>}
             {hasDemoData && <button onClick={handleClearDemo} style={{ background: "none", border: "1px solid #E88D67", borderRadius: 8, padding: "5px 12px", fontSize: 12, color: "#E88D67", cursor: "pointer" }}>🗑️ Demo</button>}
             <button onClick={handleExport} style={{ background: "none", border: "1px solid #E8E2D8", borderRadius: 8, padding: "5px 12px", fontSize: 12, color: "#8A8478", cursor: "pointer" }}>CSV ↓</button>
+            <button onClick={logout} style={{ background: "none", border: "1px solid #E8E2D8", borderRadius: 8, padding: "5px 12px", fontSize: 12, color: "#8A8478", cursor: "pointer" }}>Salir</button>
           </div>
         </div>
       </div>
@@ -804,7 +796,7 @@ export default function App() {
         {view === "dashboard" && <DashboardView entries={entries} onSelectDate={handleSelectDate} categories={categories} />}
         {view === "settings" && <SettingsView categories={categories} setCategories={setCategories} />}
       </div>
-      {toast && <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#2D2A26", color: "#fff", padding: "10px 24px", borderRadius: 12, fontSize: 14, fontWeight: 500, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 100, animation: "fadeIn 0.3s ease" }}>{toast}</div>}
+      {toast && <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#2D2A26", color: "#fff", padding: "10px 24px", borderRadius: 12, fontSize: 14, fontWeight: 500, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 100 }}>{toast}</div>}
     </div>
   );
 }
