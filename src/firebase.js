@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDKcyjMjYfZiZ-XjX79KVp0v5vugCZZphs",
-  authDomain: "mood-tracker-6874d.firebaseapp.com",
-  projectId: "mood-tracker-6874d",
-  storageBucket: "mood-tracker-6874d.firebasestorage.app",
-  messagingSenderId: "1561114015591",
-  appId: "1:1561114015591:web:989157a5c13693aa1e0bc2",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
