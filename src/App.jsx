@@ -408,7 +408,7 @@ function ComparisonBar({ label, avg, count, color }) {
   );
 }
 
-function Tooltip({ text, children }) {
+function HoverTip({ text, children }) {
   const [show, setShow] = React.useState(false);
   return (
     <div style={{ position: "relative", display: "inline-flex" }}
