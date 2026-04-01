@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { db } from "./firebase";
 import { useAuth } from "./AuthContext";
@@ -408,53 +408,76 @@ function ComparisonBar({ label, avg, count, color }) {
   );
 }
 
+function Tooltip({ text, children }) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <div style={{ position: "relative", display: "inline-flex" }}
+      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <div style={{ position: "absolute", bottom: "120%", left: "50%", transform: "translateX(-50%)", background: "#2D2A26", color: "#fff", padding: "5px 10px", borderRadius: 8, fontSize: 11, whiteSpace: "nowrap", zIndex: 50, pointerEvents: "none", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
+          {text}
+          <div style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", borderWidth: 4, borderStyle: "solid", borderColor: "#2D2A26 transparent transparent transparent" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MoodStory({ data, onSelectDate, categories }) {
-  const W = Math.max(data.length * 28, 400);
-  const colW = W / data.length;
+  const colW = 36;
+  const W = Math.max(data.length * colW, 400);
+  const SVG_H = 160;
+  const TOP_PAD = 10;
+  const BOTTOM_PAD = 10;
+  const CHART_H = SVG_H - TOP_PAD - BOTTOM_PAD;
   return (
     <div style={{ overflowX: "auto", marginBottom: 8 }}>
       <div style={{ minWidth: W, position: "relative" }}>
-        <svg width={W} height={120} style={{ display: "block" }}>
-          {[0,1,2,3,4].map((v) => <line key={v} x1={0} y1={100 - v * 22} x2={W} y2={100 - v * 22} stroke="#F0EBE3" strokeWidth={1} />)}
-          {[0,2,4].map((v) => <text key={v} x={4} y={100 - v * 22 + 4} fontSize={11} fill="#B0A99E">{MOODS[v]}</text>)}
+        <svg width={W} height={SVG_H} style={{ display: "block" }}>
+          {[0,1,2,3,4].map((v) => <line key={v} x1={0} y1={TOP_PAD + CHART_H - v * (CHART_H/4)} x2={W} y2={TOP_PAD + CHART_H - v * (CHART_H/4)} stroke="#F0EBE3" strokeWidth={1} />)}
+          {[0,2,4].map((v) => <text key={v} x={4} y={TOP_PAD + CHART_H - v * (CHART_H/4) + 4} fontSize={13} fill="#B0A99E">{MOODS[v]}</text>)}
           {data.length > 1 && (() => {
-            const pts = data.map((e, i) => e.mood !== null ? { x: colW * i + colW / 2, y: 100 - e.mood * 22 } : null).filter(Boolean);
+            const pts = data.map((e, i) => e.mood !== null ? { x: colW * i + colW / 2, y: TOP_PAD + CHART_H - e.mood * (CHART_H/4) } : null).filter(Boolean);
             if (pts.length < 2) return null;
             return <path d={pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")} fill="none" stroke="#C67B5C" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />;
           })()}
           {data.map((e, i) => e.mood === null ? null : (
             <g key={i} style={{ cursor: "pointer" }} onClick={() => onSelectDate(e.date)}>
-              <circle cx={colW * i + colW / 2} cy={100 - e.mood * 22} r={6} fill={MOOD_COLORS[e.mood]} stroke="#fff" strokeWidth={2} />
+              <title>{`Mood: ${MOOD_LABELS[e.mood]}`}</title>
+              <circle cx={colW * i + colW / 2} cy={TOP_PAD + CHART_H - e.mood * (CHART_H/4)} r={7} fill={MOOD_COLORS[e.mood]} stroke="#fff" strokeWidth={2} />
             </g>
           ))}
         </svg>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 2 }}>
-          <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 2 }}>
+          <div style={{ display: "flex", height: 20, borderRadius: 4, overflow: "hidden" }}>
             {data.map((e, i) => { const p = e.cyclePhase ? CYCLE_PHASES.find((c) => c.id === e.cyclePhase) : null;
-              return <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: p ? `${p.color}60` : "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8 }}>{p?.emoji}</div>;
+              return <div key={i} onClick={() => onSelectDate(e.date)} title={p ? `Ciclo: ${p.label}` : ""} style={{ width: colW, background: p ? `${p.color}60` : "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{p?.emoji}</div>;
             })}
           </div>
-          <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ display: "flex", height: 20, borderRadius: 4, overflow: "hidden" }}>
             {data.map((e, i) => { const w = e.weatherType ? WEATHER_TYPES.find((x) => x.id === e.weatherType) : null;
-              return <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8 }}>{w?.emoji}</div>;
+              return <div key={i} onClick={() => onSelectDate(e.date)} title={w ? `Clima: ${w.label}` : ""} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{w?.emoji}</div>;
             })}
           </div>
-          <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ display: "flex", height: 20, borderRadius: 4, overflow: "hidden" }}>
             {data.map((e, i) => (
-              <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {(e.hours.gym || 0) > 0 && <div style={{ width: 8, height: 8, borderRadius: 4, background: "#B5725B" }} />}
+              <div key={i} onClick={() => onSelectDate(e.date)} title={(e.hours.gym || 0) > 0 ? "Fuiste al gym ✅" : "No fuiste al gym"} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+                {(e.hours.gym || 0) > 0 ? "✅" : ""}
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", height: 18, borderRadius: 4, overflow: "hidden", gap: 1 }}>
+          <div style={{ display: "flex", height: 40, borderRadius: 4, overflow: "hidden", gap: 1, alignItems: "flex-end" }}>
             {data.map((e, i) => { const total = Object.values(e.hours).reduce((a, b) => a + b, 0);
-              return <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 1px" }}>
-                {total > 0 && <div style={{ width: "70%", height: `${Math.min(total / 8, 1) * 100}%`, background: "#5B7FB5", borderRadius: "2px 2px 0 0", minHeight: 2 }} />}
+              const cats = categories.filter(c => (e.hours[c.id] || 0) > 0);
+              const tipText = total > 0 ? `${total}h total: ` + cats.map(c => `${c.label} ${e.hours[c.id]}h`).join(", ") : "Sin horas";
+              return <div key={i} onClick={() => onSelectDate(e.date)} title={tipText} style={{ width: colW, background: "#F5F1EB", cursor: "pointer", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 2px", height: "100%" }}>
+                {total > 0 && <div style={{ width: "75%", height: `${Math.min(total / 8, 1) * 100}%`, background: "#5B7FB5", borderRadius: "3px 3px 0 0", minHeight: 4 }} />}
               </div>;
             })}
           </div>
-          <div style={{ display: "flex", height: 16 }}>
-            {data.map((e, i) => <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, textAlign: "center", fontSize: 8, color: "#B0A99E", cursor: "pointer", lineHeight: "16px" }}>{new Date(e.date + "T12:00:00").getDate()}</div>)}
+          <div style={{ display: "flex", height: 18 }}>
+            {data.map((e, i) => <div key={i} onClick={() => onSelectDate(e.date)} style={{ width: colW, textAlign: "center", fontSize: 9, color: "#B0A99E", cursor: "pointer", lineHeight: "18px" }}>{new Date(e.date + "T12:00:00").getDate()}</div>)}
           </div>
         </div>
       </div>
@@ -462,19 +485,43 @@ function MoodStory({ data, onSelectDate, categories }) {
   );
 }
 
+function getRangeWindow(range, offset) {
+  const now = new Date();
+  if (range === "week") {
+    const end = new Date(now); end.setDate(end.getDate() - offset * 7);
+    const start = new Date(end); start.setDate(start.getDate() - 6);
+    return { start, end, label: offset === 0 ? "Últimos 7 días" : `${start.toLocaleDateString("es-AR",{day:"numeric",month:"short"})} – ${end.toLocaleDateString("es-AR",{day:"numeric",month:"short"})}` };
+  }
+  if (range === "month") {
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    return { start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 0), label: d.toLocaleDateString("es-AR",{month:"long",year:"numeric"}) };
+  }
+  if (range === "3months") {
+    const end = new Date(now.getFullYear(), now.getMonth() - offset * 3 + 1, 0);
+    const start = new Date(now.getFullYear(), now.getMonth() - offset * 3 - 2, 1);
+    return { start, end, label: `${start.toLocaleDateString("es-AR",{month:"short"})} – ${end.toLocaleDateString("es-AR",{month:"short",year:"numeric"})}` };
+  }
+  return null;
+}
+
 function DashboardView({ entries, onSelectDate, categories }) {
-  const [range, setRange] = useState("month");
+  const [range, setRange] = useState(() => localStorage.getItem("dashboard-range") || "month");
+  const [offset, setOffset] = useState(0);
   const allDates = useMemo(() => Object.keys(entries).sort(), [entries]);
+
+  const handleRangeChange = (r) => { setRange(r); setOffset(0); localStorage.setItem("dashboard-range", r); };
+
   const filteredDates = useMemo(() => {
-    const now = new Date();
-    return allDates.filter((d) => { const dt = new Date(d + "T12:00:00");
-      if (range === "week") return (now - dt) / 86400000 >= 0 && (now - dt) / 86400000 < 7;
-      if (range === "month") return dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear();
-      if (range === "3months") return (now - dt) / 86400000 >= 0 && (now - dt) / 86400000 < 90;
-      return true;
+    if (range === "all") return allDates;
+    const win = getRangeWindow(range, offset);
+    if (!win) return allDates;
+    return allDates.filter((d) => {
+      const dt = new Date(d + "T12:00:00");
+      return dt >= win.start && dt <= win.end;
     });
-  }, [allDates, range]);
+  }, [allDates, range, offset]);
   const data = useMemo(() => filteredDates.map((d) => entries[d]), [filteredDates, entries]);
+  const rangeWindow = range !== "all" ? getRangeWindow(range, offset) : null;
 
   if (allDates.length === 0) return (
     <div style={{ textAlign: "center", padding: 60, maxWidth: 560, margin: "0 auto" }}>
@@ -493,11 +540,18 @@ function DashboardView({ entries, onSelectDate, categories }) {
   return (
     <div style={{ maxWidth: 620, margin: "0 auto" }}>
       <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 28, fontWeight: 500, color: "#2D2A26", margin: "0 0 6px 0", textAlign: "center" }}>Dashboard</h2>
-      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 12 }}>
         {[{ id: "week", label: "7 días" }, { id: "month", label: "Este mes" }, { id: "3months", label: "3 meses" }, { id: "all", label: "Todo" }].map((r) => (
-          <button key={r.id} onClick={() => setRange(r.id)} style={{ padding: "6px 14px", borderRadius: 18, border: range === r.id ? "2px solid #C67B5C" : "2px solid #E8E2D8", background: range === r.id ? "#C67B5C12" : "#fff", color: range === r.id ? "#C67B5C" : "#8A8478", fontWeight: range === r.id ? 600 : 400, cursor: "pointer", fontSize: 13 }}>{r.label}</button>
+          <button key={r.id} onClick={() => handleRangeChange(r.id)} style={{ padding: "6px 14px", borderRadius: 18, border: range === r.id ? "2px solid #C67B5C" : "2px solid #E8E2D8", background: range === r.id ? "#C67B5C12" : "#fff", color: range === r.id ? "#C67B5C" : "#8A8478", fontWeight: range === r.id ? 600 : 400, cursor: "pointer", fontSize: 13 }}>{r.label}</button>
         ))}
       </div>
+      {range !== "all" && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button onClick={() => setOffset(o => o + 1)} style={{ background: "#fff", border: "1px solid #E8E2D8", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: "#6B6560" }}>←</button>
+          <span style={{ fontSize: 13, color: "#6B6560", minWidth: 160, textAlign: "center", textTransform: "capitalize" }}>{rangeWindow?.label}</span>
+          <button onClick={() => setOffset(o => Math.max(0, o - 1))} disabled={offset === 0} style={{ background: "#fff", border: "1px solid #E8E2D8", borderRadius: 8, width: 32, height: 32, cursor: offset === 0 ? "default" : "pointer", fontSize: 16, color: offset === 0 ? "#D4CEC8" : "#6B6560" }}>→</button>
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
         {[{ label: "Mood prom.", value: avgMood !== null ? MOODS[Math.round(avgMood)] : "—", sub: avgMood !== null ? avgMood.toFixed(1) : "" }, { label: "Horas total", value: `${totalHours}h`, sub: `${data.length} días` }, { label: "Días gym", value: gymDays, sub: `de ${data.length}` }, { label: "Racha", value: streakDays, sub: "días" }].map((s, i) => (
           <div key={i} style={{ background: "#fff", borderRadius: 14, padding: "14px 10px", textAlign: "center", boxShadow: "0 1px 4px rgba(45,42,38,0.06)" }}>
@@ -507,7 +561,7 @@ function DashboardView({ entries, onSelectDate, categories }) {
           </div>
         ))}
       </div>
-      {data.length > 1 && <Section title="Mood Story"><p style={{ fontSize: 11, color: "#B0A99E", margin: "0 0 10px 0" }}>Línea = mood · debajo: ciclo, clima, gym, horas · click → ficha</p><MoodStory data={data} onSelectDate={onSelectDate} categories={categories} /></Section>}
+      {data.length > 0 && <Section title="Mood Story"><p style={{ fontSize: 11, color: "#B0A99E", margin: "0 0 10px 0" }}>Línea = mood · debajo: ciclo, clima, gym, horas · click → ficha</p><MoodStory data={data} onSelectDate={onSelectDate} categories={categories} /></Section>}
       <h3 style={{ fontSize: 15, fontWeight: 600, color: "#6B6560", textTransform: "uppercase", letterSpacing: 1, margin: "24px 0 12px 0" }}>¿Qué impacta tu mood?</h3>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Section title="Gym" style={{ marginBottom: 12 }}>
@@ -767,7 +821,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button onClick={goBack} disabled={!canGoBack} style={{ ...smallNavBtn, opacity: canGoBack ? 1 : 0.3, cursor: canGoBack ? "pointer" : "default" }}>←</button>
             <button onClick={goForward} disabled={!canGoForward} style={{ ...smallNavBtn, opacity: canGoForward ? 1 : 0.3, cursor: canGoForward ? "pointer" : "default" }}>→</button>
-            <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 500, color: "#2D2A26", margin: 0 }}>Sofi Tracker</h1>
+            <h1 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 500, color: "#2D2A26", margin: 0 }}>Mood Tracker</h1>
           </div>
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             {!hasDemoData && <button onClick={handleLoadDemo} style={{ background: "none", border: "1px solid #D4A0C0", borderRadius: 8, padding: "5px 12px", fontSize: 12, color: "#D4A0C0", cursor: "pointer" }}>🎭 Demo</button>}
