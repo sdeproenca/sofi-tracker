@@ -1,0 +1,42 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Work Sans', sans-serif;
+  background: #FBF8F3;
+  color: #2D2A26;
+  -webkit-font-smoothing: antialiased;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #F0EBE3;
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #C67B5C;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+
+textarea:focus, input:focus {
+  outline: none;
+  border-color: #C67B5C !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
