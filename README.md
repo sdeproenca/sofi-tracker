@@ -1,4 +1,4 @@
-# Sofi Tracker
+# The Mood Tracker
 
 A personal daily tracker for mood, habits, productivity, and journaling. Built with React + Vite.
 
