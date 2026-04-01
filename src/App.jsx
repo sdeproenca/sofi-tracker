@@ -650,10 +650,6 @@ export default function App() {
   const [history, setHistory] = useState([{ view: "log", date: null }]);
   const [historyIdx, setHistoryIdx] = useState(0);
 
-  // Show login if not authenticated
-  if (authLoading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "#8A8478" }}>Cargando...</div>;
-  if (!user) return <LoginScreen />;
-
   // ---- FIRESTORE LOAD ----
   useEffect(() => {
     if (!user) return;
@@ -758,7 +754,9 @@ export default function App() {
 
   useEffect(() => { if (view === "log" && entries[formEntry.date]) setFormEntry({ ...entries[formEntry.date] }); }, [view]);
 
-  if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "#8A8478" }}>Cargando...</div>;
+  // Early returns after all hooks
+  if (authLoading || (user && loading)) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", color: "#8A8478" }}>Cargando...</div>;
+  if (!user) return <LoginScreen />;
 
   const tabs = [{ id: "log", label: "Registro", icon: "✏️" }, { id: "calendar", label: "Calendario", icon: "📅" }, { id: "dashboard", label: "Dashboard", icon: "📊" }, { id: "settings", label: "Config", icon: "⚙️" }];
 
